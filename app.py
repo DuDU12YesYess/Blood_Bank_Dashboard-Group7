@@ -85,32 +85,35 @@ with st.sidebar:
         options = sorted(data[column].dropna().unique().tolist())
         selections[column] = st.multiselect(label, options, default=options)
 
-filtered = data.loc[
+# Apply the selected year and month before the other dashboard filters.
+period_filtered_data = data.loc[
     data["year"].isin(selected_years) & data["month"].isin(selected_months)
 ].copy()
-for column, selected in selections.items():
-    filtered = filtered.loc[filtered[column].isin(selected)]
+filtered_data = period_filtered_data
+for column, selected_values in selections.items():
+    filtered_data = filtered_data.loc[filtered_data[column].isin(selected_values)]
 
-if filtered.empty:
+if filtered_data.empty:
     st.warning("No records match the selected filters.")
     st.stop()
 
-requested = int(filtered["units_requested_month"].sum())
-collected = int(filtered["units_collected_month"].sum())
-transfused = int(filtered["units_transfused"].sum())
-expired = int(filtered["units_expired"].sum())
-shortage_rate = filtered["shortage_in_last_month"].mean() * 100
+# The cards summarize only rows that passed every selected filter.
+requested_units = int(filtered_data["units_requested_month"].sum())
+collected_units = int(filtered_data["units_collected_month"].sum())
+transfused_units = int(filtered_data["units_transfused"].sum())
+expired_units = int(filtered_data["units_expired"].sum())
+shortage_rate = filtered_data["shortage_in_last_month"].mean() * 100
 
 metric_columns = st.columns(5)
-metric_columns[0].metric("Records", f"{len(filtered):,}")
-metric_columns[1].metric("Units collected", f"{collected:,}")
-metric_columns[2].metric("Units transfused", f"{transfused:,}")
-metric_columns[3].metric("Expired units", f"{expired:,}")
-metric_columns[4].metric("Units requested", f"{requested:,}")
+metric_columns[0].metric("Records", f"{len(filtered_data):,}")
+metric_columns[1].metric("Units collected", f"{collected_units:,}")
+metric_columns[2].metric("Units transfused", f"{transfused_units:,}")
+metric_columns[3].metric("Expired units", f"{expired_units:,}")
+metric_columns[4].metric("Units requested", f"{requested_units:,}")
 st.metric("Records reporting a shortage", f"{shortage_rate:.1f}%")
 
 trend = (
-    filtered.groupby(["year", "month"], as_index=False)[
+    filtered_data.groupby(["year", "month"], as_index=False)[
         ["units_collected_month", "units_requested_month", "units_transfused"]
     ]
     .sum()
@@ -137,7 +140,7 @@ with left:
 with right:
     st.subheader("Units requested by blood group")
     blood_group_demand = (
-        filtered.groupby("blood_group")["units_requested_month"]
+        filtered_data.groupby("blood_group")["units_requested_month"]
         .sum()
         .sort_values(ascending=False)
     )
@@ -145,7 +148,7 @@ with right:
 
 st.subheader("Shortages by product category")
 shortages = (
-    filtered.groupby("product_category", as_index=False)
+    filtered_data.groupby("product_category", as_index=False)
     .agg(
         shortage_rate=("shortage_in_last_month", "mean"),
         records=("shortage_in_last_month", "size"),
